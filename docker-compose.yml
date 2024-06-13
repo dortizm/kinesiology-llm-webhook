@@ -1,0 +1,106 @@
+version: '3.3'
+
+services:
+  web:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: fiuls-inicia:1.0
+    # '/start' is the shell script used to run the service
+    command: /start
+    # this volume is used to map the files and folders on the host to the container
+    # so if we change code on the host, code in the docker container will also be changed
+    volumes:
+      - ./web:/app
+      - static_volume:/app/assets
+      - media_volume:/app/media
+    # env_file is used to manage the env variables of our project
+    env_file:
+      - ./env/.dev-sample
+    cap_add:
+      - NET_ADMIN
+    restart: always
+    ports:
+      - 8000:8000
+    depends_on:
+      - redis
+      - db
+
+  db:
+    image: postgres:14-alpine
+    volumes:
+      - postgres_data:/var/lib/postgresql/data/
+    environment:
+      - POSTGRES_DB=hello_django
+      - POSTGRES_USER=hello_django
+      - POSTGRES_PASSWORD=hello_django
+    restart: always
+    ports:
+      - 5431:5432
+
+  redis:
+    image: redis:7-alpine
+    restart: always
+
+  celery_worker:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: fiuls-inicia-worker:1.0
+    command: /start-celeryworker
+    volumes:
+      - ./web:/app
+    env_file:
+      - ./env/.dev-sample
+    restart: always
+    depends_on:
+      - redis
+      - db
+
+  celery_beat:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: fiuls-inicia-celery_beat:1.0
+    command: /start-celerybeat
+    volumes:
+      - ./web:/app
+    env_file:
+      - ./env/.dev-sample
+    restart: always
+    depends_on:
+      - redis
+      - db
+
+  flower:
+    build:
+      context: .
+      dockerfile: ./compose/local/django/Dockerfile
+    image: fiuls-inicia-celery_flower:1.0
+    command: /start-flower
+    volumes:
+      - ./web:/app
+    env_file:
+      - ./env/.dev-sample
+    ports:
+      - 5557:5555
+    restart: always
+    depends_on:
+      - redis
+      - db
+
+  nginx:
+    build: ./nginx
+    ports:
+      - 80:80
+    volumes:
+      - static_volume:/app/assets
+      - media_volume:/app/media
+    depends_on:
+      - web
+    restart: "always"
+
+volumes:
+  postgres_data:
+  static_volume:
+  media_volume:
